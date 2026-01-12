@@ -1,0 +1,104 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  password      String
+  name          String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  conversations Conversation[]
+  studySessions StudySession[]
+  quizzes       Quiz[]
+  studyGoals    StudyGoal[]
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  title     String
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // 'user', 'assistant', 'system'
+  content        String       @db.Text
+  audioUrl       String? // Optional audio file reference
+  functionCalls  Json? // Store function call data
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+model StudySession {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  topic       String?
+  duration    Int // Duration in minutes
+  notesCount  Int      @default(0)
+  startedAt   DateTime
+  completedAt DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([userId, startedAt])
+}
+
+model Quiz {
+  id          String         @id @default(cuid())
+  userId      String
+  user        User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  topic       String
+  questions   Json // Array of question objects
+  createdAt   DateTime       @default(now())
+  attempts    QuizAttempt[]
+
+  @@index([userId, subject])
+}
+
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  quizId      String
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  score       Float // Percentage score
+  answers     Json // Array of answer objects
+  completedAt DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([quizId, createdAt])
+}
+
+model StudyGoal {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subject     String
+  targetHours Int // Target study hours
+  deadline    DateTime
+  progress    Int      @default(0) // Current hours studied
+  status      String   @default("active") // 'active', 'completed', 'abandoned'
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, status])
+}
