@@ -273,8 +273,8 @@ export async function getStudyProgress(args: {
     orderBy: { startedAt: 'desc' }
   })
 
-  const totalMinutes = sessions.reduce((sum, s) => sum + s.duration, 0)
-  const subjectBreakdown = sessions.reduce((acc, s) => {
+  const totalMinutes = sessions.reduce((sum: number, s) => sum + s.duration, 0)
+  const subjectBreakdown = sessions.reduce((acc: Record<string, number>, s) => {
     acc[s.subject] = (acc[s.subject] || 0) + s.duration
     return acc
   }, {} as Record<string, number>)
