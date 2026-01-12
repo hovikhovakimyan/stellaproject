@@ -56,6 +56,10 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
   const realtime = useRealtime({
     conversationId: id,
     userId: userId || '',
+    conversationHistory: messages.map(m => ({
+      role: m.role,
+      content: m.content
+    })),
     onMessage: async (msg) => {
       console.log('🎯 onMessage called:', msg.role, msg.content.substring(0, 50))
 

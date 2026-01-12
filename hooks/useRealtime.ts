@@ -10,6 +10,7 @@ interface RealtimeMessage {
 interface RealtimeConfig {
   conversationId: string
   userId: string
+  conversationHistory?: Array<{ role: string; content: string }>
   onMessage?: (message: RealtimeMessage) => void
   onFunctionCall?: (name: string, args: any) => void
   onError?: (error: Error) => void
@@ -69,11 +70,18 @@ export function useRealtime(config: RealtimeConfig) {
           case 'session.created':
             console.log('✅ Session created')
 
-            // Disable VAD - turn_detection goes in audio.input per session.updated structure
+            // Configure session with functions and disable VAD
             ws.send(JSON.stringify({
               type: 'session.update',
               session: {
                 type: 'realtime',
+                tools: functions.map(fn => ({
+                  type: 'function',
+                  name: fn.name,
+                  description: fn.description,
+                  parameters: fn.parameters
+                })),
+                tool_choice: 'auto',
                 audio: {
                   input: {
                     turn_detection: null
@@ -81,7 +89,30 @@ export function useRealtime(config: RealtimeConfig) {
                 }
               }
             }))
-            console.log('📤 Sent session config with turn_detection=null')
+            console.log('📤 Sent session config with', functions.length, 'functions and turn_detection=null')
+
+            // Inject conversation history if provided
+            if (config.conversationHistory && config.conversationHistory.length > 0) {
+              console.log('📜 Injecting conversation history:', config.conversationHistory.length, 'messages')
+
+              // Add each message from history as a conversation item
+              for (const msg of config.conversationHistory) {
+                if (msg.role === 'user' || msg.role === 'assistant') {
+                  ws.send(JSON.stringify({
+                    type: 'conversation.item.create',
+                    item: {
+                      type: 'message',
+                      role: msg.role,
+                      content: [{
+                        type: 'input_text',
+                        text: msg.content
+                      }]
+                    }
+                  }))
+                }
+              }
+              console.log('✅ Conversation history injected')
+            }
             break
 
           case 'session.updated':
@@ -196,6 +227,7 @@ export function useRealtime(config: RealtimeConfig) {
           case 'response.function_call_arguments.done':
             // Execute function call
             const { name, arguments: args } = data
+            console.log('🔧 Function call:', name, args)
             config.onFunctionCall?.(name, JSON.parse(args))
 
             // Execute the function and send result back
@@ -203,9 +235,16 @@ export function useRealtime(config: RealtimeConfig) {
               const result = await fetch('/api/functions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name, arguments: JSON.parse(args) })
+                body: JSON.stringify({
+                  name,
+                  arguments: JSON.parse(args),
+                  conversationId: config.conversationId
+                })
               }).then(r => r.json())
 
+              console.log('✅ Function result:', result)
+
+              // Send function result back to continue the conversation
               ws.send(JSON.stringify({
                 type: 'conversation.item.create',
                 item: {
@@ -213,6 +252,11 @@ export function useRealtime(config: RealtimeConfig) {
                   call_id: data.call_id,
                   output: JSON.stringify(result.result)
                 }
+              }))
+
+              // Trigger a new response to process the function result
+              ws.send(JSON.stringify({
+                type: 'response.create'
               }))
             } catch (err) {
               console.error('Function call error:', err)
