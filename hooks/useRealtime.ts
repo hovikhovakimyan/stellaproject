@@ -30,6 +30,9 @@ export function useRealtime(config: RealtimeConfig) {
   const currentTranscriptRef = useRef<string>('')
   const currentResponseIdRef = useRef<string | null>(null)
   const processorRef = useRef<ScriptProcessorNode | null>(null)
+  const recognitionRef = useRef<any>(null)
+  const userTranscriptRef = useRef<string>('')
+  const assistantMessageSentRef = useRef<boolean>(false)
 
   const connect = useCallback(async () => {
     try {
@@ -53,53 +56,109 @@ export function useRealtime(config: RealtimeConfig) {
       ws.onopen = () => {
         console.log('Connected to OpenAI Realtime API')
         setIsConnected(true)
-
-        // Send session configuration - GA API
-        ws.send(JSON.stringify({
-          type: 'session.update',
-          session: {
-            modalities: ['text', 'audio'],
-            instructions: `You are TutorFlow, an AI learning companion. Help students study effectively by creating quizzes, tracking progress, setting goals, and providing study recommendations.
-
-Be encouraging, patient, and adaptive to each student's learning style. Keep responses concise and conversational.
-
-IMPORTANT: Always respond in English unless the user specifically asks you to use another language.`,
-            voice: 'sage',
-            temperature: 0.8,
-            max_response_output_tokens: 4096,
-            turn_detection: null, // Disable automatic turn detection - manual turn-taking
-            input_audio_transcription: {
-              model: 'whisper-1'
-            }
-          }
-        }))
+        // Don't send config yet - wait for session.created event
       }
 
       ws.onmessage = async (event) => {
         const data = JSON.parse(event.data)
 
-        console.log('Realtime event:', data.type, data)
+        // Debug logging to understand flow
+        console.log('📨 Event:', data.type)
 
         switch (data.type) {
-          case 'conversation.item.created':
-            // Check if this is a user message with transcript
-            console.log('Item created:', data.item)
-            if (data.item?.type === 'message' && data.item?.role === 'user') {
-              const content = data.item.content?.find((c: any) => c.type === 'input_audio')
-              console.log('User audio content:', content)
-              if (content?.transcript) {
-                config.onMessage?.({
-                  role: 'user',
-                  content: content.transcript,
-                  timestamp: new Date()
-                })
+          case 'session.created':
+            console.log('✅ Session created')
+
+            // Disable VAD - turn_detection goes in audio.input per session.updated structure
+            ws.send(JSON.stringify({
+              type: 'session.update',
+              session: {
+                type: 'realtime',
+                audio: {
+                  input: {
+                    turn_detection: null
+                  }
+                }
+              }
+            }))
+            console.log('📤 Sent session config with turn_detection=null')
+            break
+
+          case 'session.updated':
+            console.log('✅ Session updated confirmed')
+            console.log('🔍 FULL SESSION DATA:', JSON.stringify(data.session, null, 2))
+            break
+
+          case 'input_audio_buffer.speech_started':
+            console.log('🚨 VAD DETECTED SPEECH START - THIS SHOULD NOT HAPPEN!')
+            break
+
+          case 'input_audio_buffer.speech_stopped':
+            console.log('🚨 VAD DETECTED SPEECH STOP - CANCELLING AUTO RESPONSE!')
+            // Cancel any automatic response that VAD triggered
+            ws.send(JSON.stringify({
+              type: 'response.cancel'
+            }))
+            // Don't clear buffer - we want to keep it for manual commit
+            break
+
+          case 'input_audio_buffer.committed':
+            console.log('⚠️ Audio buffer was committed (likely by VAD)')
+            break
+
+          case 'response.created':
+            // New response starting - reset state
+            console.log('🔄 Response created - resetting flags')
+            console.log('⚠️ Was this triggered by user stopping recording? Check for 📤 log above')
+            assistantMessageSentRef.current = false
+            currentTranscriptRef.current = ''
+            currentResponseIdRef.current = data.response?.id || Date.now().toString()
+            break
+
+          case 'conversation.item.done':
+            // Item is complete - check if it's a user or assistant message with transcript
+            if (data.item?.type === 'message') {
+              if (data.item.role === 'user') {
+                const content = data.item.content?.find((c: any) => c.type === 'input_audio')
+                if (content?.transcript) {
+                  // OpenAI provided a transcript - use it and clear browser transcript
+                  userTranscriptRef.current = ''
+                  config.onMessage?.({
+                    role: 'user',
+                    content: content.transcript,
+                    timestamp: new Date()
+                  })
+                }
+                // If no transcript from OpenAI, browser transcript will be used in stopRecording
+              } else if (data.item.role === 'assistant') {
+                // Assistant message - get transcript from output_audio content
+                const content = data.item.content?.find((c: any) => c.type === 'output_audio')
+                if (content?.transcript) {
+                  console.log('📝 conversation.item.done with transcript:', content.transcript)
+                  console.log('📌 assistantMessageSentRef:', assistantMessageSentRef.current)
+
+                  if (!assistantMessageSentRef.current) {
+                    console.log('💬 Sending AI message (item.done):', content.transcript)
+                    assistantMessageSentRef.current = true
+                    config.onMessage?.({
+                      role: 'assistant',
+                      content: content.transcript,
+                      timestamp: new Date()
+                    })
+                  } else {
+                    console.log('⚠️ Skipping duplicate - already sent via delta')
+                  }
+                  // Clear accumulated transcript
+                  currentTranscriptRef.current = ''
+                }
               }
             }
             break
 
           case 'conversation.item.input_audio_transcription.completed':
+          case 'input_audio_transcription.completed':
+          case 'input_audio_buffer.transcription.completed':
             // User's speech transcript is complete
-            console.log('Transcription completed:', data)
             if (data.transcript) {
               config.onMessage?.({
                 role: 'user',
@@ -109,6 +168,12 @@ IMPORTANT: Always respond in English unless the user specifically asks you to us
             }
             break
 
+          case 'conversation.item.input_audio_transcription.failed':
+          case 'input_audio_transcription.failed':
+          case 'input_audio_buffer.transcription.failed':
+            console.error('❌ Transcription failed:', data)
+            break
+
           case 'response.output_audio.delta':
             // Play audio chunk (GA API event name)
             if (data.delta) {
@@ -116,29 +181,28 @@ IMPORTANT: Always respond in English unless the user specifically asks you to us
             }
             break
 
-          case 'response.created':
-            // Start of new response - reset transcript accumulator
-            currentTranscriptRef.current = ''
-            currentResponseIdRef.current = data.response?.id || Date.now().toString()
-            break
-
           case 'response.output_audio_transcript.delta':
-            // Accumulate transcript deltas
+          case 'response.audio_transcript.delta':
+            // Just accumulate transcript deltas, don't send message yet
             if (data.delta) {
               currentTranscriptRef.current += data.delta
+              console.log('📝 Accumulating transcript:', currentTranscriptRef.current)
             }
             break
 
           case 'response.output_audio_transcript.done':
-            // Full transcript is complete - send as one message
-            if (currentTranscriptRef.current) {
+          case 'response.audio_transcript.done':
+            // Transcript complete - send it immediately
+            if (currentTranscriptRef.current && !assistantMessageSentRef.current) {
+              console.log('💬 Sending AI message (transcript.done):', currentTranscriptRef.current)
+              assistantMessageSentRef.current = true
               config.onMessage?.({
                 role: 'assistant',
                 content: currentTranscriptRef.current,
                 timestamp: new Date()
               })
-              currentTranscriptRef.current = ''
             }
+            currentTranscriptRef.current = ''
             break
 
           case 'response.function_call_arguments.done':
@@ -237,20 +301,81 @@ IMPORTANT: Always respond in English unless the user specifically asks you to us
         stopAudioPlayback()
       }
 
+      // Start browser-based speech recognition as backup
+      userTranscriptRef.current = ''
+      try {
+        const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+        if (SpeechRecognition) {
+          const recognition = new SpeechRecognition()
+          recognition.continuous = true
+          recognition.interimResults = true // Enable interim results
+          recognition.lang = 'en-US'
+
+          console.log('🎤 Starting browser speech recognition')
+
+          recognition.onstart = () => {
+            console.log('🎤 Speech recognition started')
+          }
+
+          recognition.onresult = (event: any) => {
+            console.log('🎤 Recognition result event:', event.results.length)
+            // Get the latest result
+            let transcript = ''
+            for (let i = 0; i < event.results.length; i++) {
+              transcript += event.results[i][0].transcript + ' '
+            }
+            transcript = transcript.trim()
+
+            if (transcript) {
+              userTranscriptRef.current = transcript
+              console.log('🎤 Browser transcription:', transcript)
+            }
+          }
+
+          recognition.onerror = (event: any) => {
+            console.error('🎤 Speech recognition error:', event.error)
+          }
+
+          recognition.onend = () => {
+            console.log('🎤 Speech recognition ended, final transcript:', userTranscriptRef.current)
+          }
+
+          recognition.start()
+          recognitionRef.current = recognition
+        } else {
+          console.warn('🎤 Speech recognition not available in this browser')
+        }
+      } catch (err) {
+        console.error('🎤 Failed to start speech recognition:', err)
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
+
+      console.log('🎙️ Microphone stream obtained:', stream.getAudioTracks().length, 'tracks')
+      console.log('🎙️ Audio track settings:', stream.getAudioTracks()[0]?.getSettings())
 
       // Use default sample rate (browser will match microphone)
       const audioContext = new AudioContext()
       audioContextRef.current = audioContext
 
+      console.log('🎙️ AudioContext sample rate:', audioContext.sampleRate)
+
       const source = audioContext.createMediaStreamSource(stream)
       const processor = audioContext.createScriptProcessor(4096, 1, 1)
       processorRef.current = processor
 
+      let chunkCount = 0
       processor.onaudioprocess = (e) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
           const inputData = e.inputBuffer.getChannelData(0)
+
+          // Check if we're actually getting audio
+          const hasAudio = inputData.some(sample => Math.abs(sample) > 0.01)
+          if (chunkCount < 5) {
+            console.log('🎙️ Audio chunk', chunkCount, 'has audio:', hasAudio, 'max:', Math.max(...Array.from(inputData)))
+            chunkCount++
+          }
 
           // Resample to 24kHz if needed (OpenAI expects 24kHz)
           const targetSampleRate = 24000
@@ -275,7 +400,39 @@ IMPORTANT: Always respond in English unless the user specifically asks you to us
   }, [])
 
   const stopRecording = useCallback(() => {
-    // Disconnect audio processor first to stop sending audio
+    console.log('🛑 Stopping recording')
+
+    // Stop browser speech recognition
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop()
+      } catch (e) {
+        console.warn('Error stopping recognition:', e)
+      }
+    }
+
+    // Show user message immediately with transcript if available, otherwise placeholder
+    const userMessage = userTranscriptRef.current || '[Speaking...]'
+    config.onMessage?.({
+      role: 'user',
+      content: userMessage,
+      timestamp: new Date()
+    })
+    userTranscriptRef.current = ''
+
+    // Send the recorded audio to AI
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      console.log('📤 Sending recorded audio to AI')
+      wsRef.current.send(JSON.stringify({
+        type: 'input_audio_buffer.commit'
+      }))
+
+      wsRef.current.send(JSON.stringify({
+        type: 'response.create'
+      }))
+    }
+
+    // Now disconnect audio processor to stop sending audio
     if (processorRef.current && audioContextRef.current) {
       processorRef.current.disconnect()
       processorRef.current = null
@@ -291,7 +448,14 @@ IMPORTANT: Always respond in English unless the user specifically asks you to us
       audioContextRef.current = null
     }
 
-    // Commit the audio buffer and trigger response when user stops recording
+    recognitionRef.current = null
+
+    setIsRecording(false)
+  }, [config])
+
+  const sendRecordedAudio = useCallback(() => {
+    console.log('📤 Manually sending recorded audio to AI')
+    // Commit the audio buffer and request response
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'input_audio_buffer.commit'
@@ -301,8 +465,6 @@ IMPORTANT: Always respond in English unless the user specifically asks you to us
         type: 'response.create'
       }))
     }
-
-    setIsRecording(false)
   }, [])
 
   const sendMessage = useCallback((text: string) => {
@@ -338,6 +500,7 @@ IMPORTANT: Always respond in English unless the user specifically asks you to us
     disconnect,
     startRecording,
     stopRecording,
+    sendRecordedAudio,
     sendMessage
   }
 }
