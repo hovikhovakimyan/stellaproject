@@ -1,13 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { handleFunctionCall } from '@/lib/functions'
+import { getCurrentUser } from '@/lib/auth'
 
 // POST /api/functions - Execute a function call
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { name, arguments: args } = body
+    const { name, arguments: args, conversationId } = body
 
-    const result = await handleFunctionCall(name, args)
+    // Get user from session
+    const user = await getCurrentUser()
+    const userId = user?.userId || args.userId
+
+    if (!userId) {
+      return NextResponse.json(
+        { error: 'User not authenticated' },
+        { status: 401 }
+      )
+    }
+
+    // Inject userId and conversationId into arguments if not present
+    const enrichedArgs = {
+      ...args,
+      userId,
+      conversationId: conversationId || args.conversationId
+    }
+
+    const result = await handleFunctionCall(name, enrichedArgs)
 
     return NextResponse.json({ result })
   } catch (error) {

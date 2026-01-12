@@ -170,6 +170,29 @@ export const functions = [
       },
       required: ['topic']
     }
+  },
+  {
+    name: 'generate_flashcards',
+    description: 'Generate flashcards from study material to help memorize key concepts. Use when the user wants to memorize facts, definitions, or concepts from the current topic.',
+    parameters: {
+      type: 'object',
+      properties: {
+        topic: {
+          type: 'string',
+          description: 'The topic these flashcards cover'
+        },
+        content: {
+          type: 'string',
+          description: 'The study material or concepts to create flashcards from. Include all the key facts, definitions, and concepts that should be turned into flashcards.'
+        },
+        count: {
+          type: 'number',
+          description: 'Number of flashcards to generate',
+          default: 5
+        }
+      },
+      required: ['topic', 'content']
+    }
   }
 ]
 
@@ -184,7 +207,7 @@ export async function createQuiz(args: {
   const { userId, subject, topic, questionCount = 5, difficulty } = args
 
   // Generate quiz questions based on topic and difficulty
-  const questions = generateQuizQuestions(topic, questionCount, difficulty)
+  const questions = await generateQuizQuestions(topic, questionCount, difficulty)
 
   const quiz = await prisma.quiz.create({
     data: {
@@ -198,7 +221,7 @@ export async function createQuiz(args: {
   return {
     success: true,
     quizId: quiz.id,
-    message: `Created a ${difficulty} quiz on ${topic} with ${questionCount} questions`
+    message: `Created a ${difficulty} quiz on ${topic} with ${questionCount} questions. Visit the Quizzes tab to take it!`
   }
 }
 
@@ -388,17 +411,124 @@ export async function searchLearningResources(args: {
   }
 }
 
-// Helper function to generate quiz questions
-function generateQuizQuestions(topic: string, count: number, difficulty: string) {
-  // In production, this would use OpenAI to generate contextual questions
-  // For now, return a template structure
-  return Array.from({ length: count }, (_, i) => ({
-    id: `q${i + 1}`,
-    question: `Sample ${difficulty} question ${i + 1} about ${topic}`,
-    options: ['Option A', 'Option B', 'Option C', 'Option D'],
-    correctAnswer: 0,
-    explanation: `This is the explanation for question ${i + 1}`
-  }))
+export async function generateFlashcards(args: {
+  userId: string
+  conversationId?: string
+  topic: string
+  content: string
+  count?: number
+}) {
+  const { userId, conversationId, topic, content, count = 5 } = args
+
+  // Use GPT-4 to extract Q&A pairs from the content
+  const flashcards = await extractFlashcardsFromContent(content, topic, count)
+
+  // Create flashcard set in database
+  const flashcardSet = await prisma.flashcardSet.create({
+    data: {
+      userId,
+      conversationId,
+      topic,
+      flashcards: {
+        create: flashcards.map((card: any) => ({
+          front: card.front,
+          back: card.back,
+          difficulty: card.difficulty
+        }))
+      }
+    },
+    include: {
+      flashcards: true
+    }
+  })
+
+  return {
+    success: true,
+    setId: flashcardSet.id,
+    flashcardCount: flashcards.length,
+    message: `Created ${flashcards.length} flashcards on ${topic}. You can review them in your Flashcards page.`
+  }
+}
+
+async function extractFlashcardsFromContent(content: string, topic: string, count: number) {
+  // Use OpenAI to intelligently extract Q&A pairs
+  const openai = await import('openai')
+  const client = new openai.default({ apiKey: process.env.OPENAI_API_KEY })
+
+  const prompt = `Extract ${count} flashcard question-answer pairs from the following content about ${topic}.
+
+Content:
+${content}
+
+Return a JSON array of flashcards with this structure:
+[
+  {
+    "front": "Question or term",
+    "back": "Answer or definition",
+    "difficulty": "easy" | "medium" | "hard"
+  }
+]
+
+Make the questions clear and specific. Answers should be concise but complete.`
+
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: 'You are a study assistant that creates effective flashcards.' },
+      { role: 'user', content: prompt }
+    ],
+    response_format: { type: 'json_object' }
+  })
+
+  const result = JSON.parse(response.choices[0].message.content || '{"flashcards":[]}')
+  return result.flashcards || []
+}
+
+// Helper function to generate quiz questions using AI
+async function generateQuizQuestions(topic: string, count: number, difficulty: string) {
+  const openai = await import('openai')
+  const client = new openai.default({ apiKey: process.env.OPENAI_API_KEY })
+
+  const difficultyGuidelines = {
+    easy: 'Basic recall and understanding questions. Simple, straightforward answers.',
+    medium: 'Application and analysis questions. Requires understanding concepts and applying them.',
+    hard: 'Complex synthesis and evaluation questions. Requires deep understanding and critical thinking.'
+  }
+
+  const prompt = `Generate ${count} multiple-choice quiz questions about ${topic} at ${difficulty} difficulty level.
+
+Difficulty guidelines: ${difficultyGuidelines[difficulty as keyof typeof difficultyGuidelines]}
+
+Return a JSON object with a "questions" array. Each question should have this structure:
+{
+  "questions": [
+    {
+      "id": "q1",
+      "question": "The question text",
+      "options": ["Option A", "Option B", "Option C", "Option D"],
+      "correctAnswer": 0,
+      "explanation": "Why this answer is correct"
+    }
+  ]
+}
+
+Make sure:
+- Questions are clear and specific to ${topic}
+- All 4 options are plausible but only one is correct
+- correctAnswer is the index (0-3) of the correct option
+- Explanations are educational and help learning`
+
+  const response = await client.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [
+      { role: 'system', content: 'You are an expert educator creating high-quality quiz questions.' },
+      { role: 'user', content: prompt }
+    ],
+    response_format: { type: 'json_object' }
+  })
+
+  const result = JSON.parse(response.choices[0].message.content || '{"questions":[]}')
+  return result.questions || []
 }
 
 async function updateGoalProgress(userId: string, subject: string, hours: number) {
@@ -439,6 +569,8 @@ export async function handleFunctionCall(name: string, args: any) {
       return await recommendReviewTopics(args)
     case 'search_learning_resources':
       return await searchLearningResources(args)
+    case 'generate_flashcards':
+      return await generateFlashcards(args)
     default:
       throw new Error(`Unknown function: ${name}`)
   }

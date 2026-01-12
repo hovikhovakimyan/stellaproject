@@ -245,6 +245,204 @@ npx prisma migrate deploy
 - **Accessibility**: Semantic HTML and ARIA labels
 - **Performance**: React Server Components for faster initial load
 
+## Future Plans & Potential Upgrades
+
+This section outlines potential enhancements that could be added to TutorFlow to make it an even more powerful learning platform.
+
+### Content Organization & Grouping
+
+**Study Sessions / Topics Grouping**
+- Group flashcards, quizzes, and conversations by topic or study session
+- Create "Learning Paths" that bundle related content together
+- Example: A "Photosynthesis" topic could contain:
+  - The original conversation where it was explained
+  - 10 flashcards for memorizing key terms
+  - A 15-question quiz to test understanding
+  - Study session logs showing time spent
+- Benefits: Easier to review related material, see progress per topic, organize study flow
+
+**Smart Collections**
+- Auto-generate collections based on subjects (e.g., "Biology", "Calculus")
+- Date-based grouping (e.g., "Week of Jan 8-14", "Midterm Prep")
+- Performance-based grouping (e.g., "Needs Review" for topics with low quiz scores)
+- Tag system for custom organization
+
+### Enhanced Flashcard Features
+
+**Spaced Repetition System (SRS)**
+- Implement proper spaced repetition algorithm (e.g., SuperMemo SM-2)
+- Track when flashcards were last reviewed and schedule optimal review times
+- Show "due for review" notifications and counts
+- Difficulty ratings that adjust review intervals (Easy = longer interval, Hard = shorter)
+
+**Flashcard Practice Modes**
+- Study mode (flip through at your own pace)
+- Quiz mode (self-grade as Easy/Medium/Hard)
+- Match game (match terms to definitions)
+- Fill-in-the-blank mode
+
+**Image Support**
+- Add images to flashcards (especially useful for anatomy, geography, diagrams)
+- AI-generated images for visual concepts
+- OCR to create flashcards from uploaded study materials
+
+### Advanced Quiz Features
+
+**Multiple Question Types**
+- Short answer questions (text input, AI grading)
+- True/False questions
+- Fill-in-the-blank
+- Essay questions with AI feedback
+- Matching questions
+- Ordering/sequencing questions
+
+**Quiz Analytics**
+- Performance trends over time (line charts showing improvement)
+- Weak areas identification (which concepts need more work)
+- Time spent per question analytics
+- Comparison to previous attempts
+
+**Practice Tests**
+- Timed test mode with countdown
+- Randomize question order
+- Mix questions from multiple topics
+- Simulate real exam conditions
+
+### Voice & Interaction Improvements
+
+**Voice Activity Detection (VAD) Options**
+- User preference: automatic (VAD) vs manual (push-to-talk)
+- Interrupt capability (stop AI while it's speaking)
+- Multiple voice options for AI tutor personality
+- Adjustable speech speed
+
+**Multimodal Input**
+- Draw diagrams while explaining (whiteboard integration)
+- Upload PDFs/documents for AI to help study from
+- Screenshot analysis (take a photo of homework, get help)
+- LaTeX equation rendering improvements
+
+### Collaboration & Social Features
+
+**Study Groups**
+- Create shared study sessions with classmates
+- Collaborative flashcard decks (everyone contributes)
+- Group quizzes and leaderboards
+- Shared notes and resources per topic
+
+**Teacher Mode**
+- Teachers can create classrooms
+- Assign specific quizzes and flashcard sets
+- Monitor student progress and identify struggling students
+- Create custom learning paths for curriculum
+
+### Progress & Motivation
+
+**Gamification**
+- XP points for completing study sessions
+- Streak tracking (study X days in a row)
+- Achievement badges (e.g., "Quiz Master", "Flashcard Champion")
+- Level system with unlockable features
+
+**Study Insights Dashboard**
+- Heatmap of study activity (similar to GitHub contributions)
+- Subject distribution pie charts
+- Goal progress visualization
+- Weekly/monthly study reports
+
+**Reminders & Scheduling**
+- Push notifications for study reminders
+- Calendar integration (Google Calendar, iCal)
+- Optimal study time suggestions based on performance patterns
+- Deadline tracking for exams and assignments
+
+### AI Enhancements
+
+**Adaptive Learning**
+- AI adjusts difficulty based on performance
+- Personalized study plans generated automatically
+- Identifies learning patterns (e.g., "you learn best in the morning")
+- Suggests optimal study session length
+
+**Multi-Subject Context**
+- AI remembers concepts across different subjects
+- Makes connections between related topics (e.g., math in physics)
+- Comprehensive knowledge graph of everything learned
+
+**Custom Tutor Personalities**
+- Choose AI personality (encouraging, strict, humorous)
+- Subject-specialized tutors (math tutor vs language tutor)
+- Adjustable formality level
+
+### Technical Infrastructure
+
+**Offline Mode**
+- Download flashcards and quizzes for offline study
+- Sync progress when back online
+- PWA (Progressive Web App) support
+
+**Mobile Apps**
+- Native iOS and Android apps
+- Better performance and native features
+- Push notifications
+- Camera integration for document scanning
+
+**Export & Import**
+- Export flashcards to Anki, Quizlet formats
+- PDF export of quizzes and study guides
+- Import from other platforms
+- CSV/JSON data export for backup
+
+**API & Integrations**
+- Public API for third-party integrations
+- LMS integration (Canvas, Blackboard)
+- Note-taking app sync (Notion, Obsidian)
+- Browser extension for quick flashcard creation
+
+### Accessibility & Localization
+
+**Accessibility**
+- Screen reader optimization
+- Keyboard-only navigation
+- High contrast mode
+- Dyslexia-friendly fonts
+
+**Internationalization**
+- Multi-language support
+- Translation of AI responses
+- Regional date/time formats
+- Currency localization for potential premium features
+
+### Monetization (For Production)
+
+**Free Tier**
+- Basic features: conversations, flashcards, quizzes
+- Limited AI usage per month
+
+**Premium Features**
+- Unlimited AI conversations
+- Advanced analytics and insights
+- Custom tutor personalities
+- Offline mode
+- Ad-free experience
+- Priority support
+
+**Educational Institutional Licensing**
+- School/university-wide licenses
+- Teacher admin panels
+- Bulk student accounts
+- Custom integrations
+
+---
+
+**Priority Ranking** (if implementing):
+1. **High Priority**: Study session grouping, SRS for flashcards, quiz analytics
+2. **Medium Priority**: Multiple question types, voice improvements, study dashboard
+3. **Nice to Have**: Gamification, social features, mobile apps
+4. **Long Term**: Teacher mode, API, institutional licensing
+
+These features represent natural extensions of TutorFlow's core mission: making studying more effective through intelligent, personalized AI assistance.
+
 ## License
 
 MIT

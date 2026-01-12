@@ -142,6 +142,26 @@ export default function ConversationsPage() {
               >
                 TutorFlow
               </button>
+              <button
+                onClick={() => router.push('/flashcards')}
+                className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-indigo-600"
+                title="My Flashcards"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                Flashcards
+              </button>
+              <button
+                onClick={() => router.push('/quizzes')}
+                className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-indigo-600"
+                title="My Quizzes"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Quizzes
+              </button>
               <span className="text-2xl font-bold text-gray-300">|</span>
               <h1 className="text-2xl font-bold text-gray-900">Conversations</h1>
             </div>

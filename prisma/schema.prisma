@@ -21,6 +21,7 @@ model User {
   studySessions StudySession[]
   quizzes       Quiz[]
   studyGoals    StudyGoal[]
+  flashcardSets FlashcardSet[]
 }
 
 model Conversation {
@@ -101,4 +102,28 @@ model StudyGoal {
   updatedAt   DateTime @updatedAt
 
   @@index([userId, status])
+}
+
+model FlashcardSet {
+  id             String      @id @default(cuid())
+  userId         String
+  conversationId String?
+  topic          String
+  createdAt      DateTime    @default(now())
+  flashcards     Flashcard[]
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model Flashcard {
+  id         String       @id @default(cuid())
+  setId      String
+  front      String       @db.Text // Question
+  back       String       @db.Text // Answer
+  difficulty String? // 'easy', 'medium', 'hard'
+  createdAt  DateTime     @default(now())
+  set        FlashcardSet @relation(fields: [setId], references: [id], onDelete: Cascade)
+
+  @@index([setId])
 }
