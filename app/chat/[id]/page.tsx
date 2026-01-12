@@ -100,6 +100,13 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         createdAt: new Date().toISOString(),
         functionCalls: { name, args }
       }])
+
+      // Invalidate cache when flashcards or quizzes are created
+      if (name === 'generate_flashcards' && userId) {
+        cache.invalidate(`flashcards:${userId}`)
+      } else if (name === 'create_quiz' && userId) {
+        cache.invalidate(`quizzes:${userId}`)
+      }
     },
     onError: (error) => {
       console.error('Realtime error:', error)
@@ -212,6 +219,17 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
         // Invalidate cache since messages changed
         cache.invalidate(`conversation:${id}`)
         cache.invalidate('conversations')
+
+        // Invalidate quizzes/flashcards cache if function was called
+        if (data.functionCalls && userId) {
+          data.functionCalls.forEach((call: any) => {
+            if (call.name === 'generate_flashcards') {
+              cache.invalidate(`flashcards:${userId}`)
+            } else if (call.name === 'create_quiz') {
+              cache.invalidate(`quizzes:${userId}`)
+            }
+          })
+        }
       } catch (error) {
         console.error('Error getting response:', error)
         const errorMessage: Message = {

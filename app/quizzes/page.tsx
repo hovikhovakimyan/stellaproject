@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { cache } from '@/lib/cache'
 
 type QuizAttempt = {
   id: string
@@ -41,14 +42,58 @@ export default function QuizzesPage() {
       const { user } = await authResponse.json()
       setUserId(user.id)
 
+      // Check cache first
+      const cacheKey = `quizzes:${user.id}`
+      const cached = cache.get<Quiz[]>(cacheKey)
+
+      if (cached) {
+        setQuizzes(cached)
+        setIsLoading(false)
+        return
+      }
+
       // Load quizzes
       const response = await fetch(`/api/quizzes?userId=${user.id}`)
       const data = await response.json()
-      setQuizzes(data.quizzes || [])
+      const quizzesData = data.quizzes || []
+
+      // Cache the result
+      cache.set(cacheKey, quizzesData)
+
+      setQuizzes(quizzesData)
     } catch (error) {
       console.error('Error loading quizzes:', error)
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const deleteQuiz = async (quizId: string, e: React.MouseEvent) => {
+    e.preventDefault() // Prevent navigation to quiz page
+
+    if (!confirm('Are you sure you want to delete this quiz? This cannot be undone.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/quizzes/${quizId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        throw new Error('Failed to delete quiz')
+      }
+
+      // Update local state
+      setQuizzes(prev => prev.filter(q => q.id !== quizId))
+
+      // Invalidate cache
+      if (userId) {
+        cache.invalidate(`quizzes:${userId}`)
+      }
+    } catch (error) {
+      console.error('Error deleting quiz:', error)
+      alert('Failed to delete quiz. Please try again.')
     }
   }
 
@@ -115,37 +160,47 @@ export default function QuizzesPage() {
               const questionCount = Array.isArray(quiz.questions) ? quiz.questions.length : 0
 
               return (
-                <Link
-                  key={quiz.id}
-                  href={`/quizzes/${quiz.id}`}
-                  className="block rounded-lg border border-gray-200 bg-white p-6 shadow-sm transition-all hover:shadow-md hover:border-purple-300"
-                >
-                  <div className="mb-3">
-                    <div className="flex items-start justify-between mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">{quiz.topic}</h3>
-                      {lastAttempt && (
-                        <div className={`rounded-full px-3 py-1 text-sm font-medium ${
-                          lastAttempt.score >= 80 ? 'bg-green-100 text-green-700' :
-                          lastAttempt.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
-                          'bg-red-100 text-red-700'
-                        }`}>
-                          {Math.round(lastAttempt.score)}%
-                        </div>
-                      )}
+                <div key={quiz.id} className="group relative">
+                  <Link
+                    href={`/quizzes/${quiz.id}`}
+                    className="block rounded-lg border border-gray-200 bg-white p-6 shadow-sm transition-all hover:shadow-md hover:border-purple-300"
+                  >
+                    <div className="mb-3">
+                      <div className="flex items-start justify-between mb-2">
+                        <h3 className="text-lg font-semibold text-gray-900">{quiz.topic}</h3>
+                        {lastAttempt && (
+                          <div className={`rounded-full px-3 py-1 text-sm font-medium ${
+                            lastAttempt.score >= 80 ? 'bg-green-100 text-green-700' :
+                            lastAttempt.score >= 60 ? 'bg-yellow-100 text-yellow-700' :
+                            'bg-red-100 text-red-700'
+                          }`}>
+                            {Math.round(lastAttempt.score)}%
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-600">{quiz.subject}</p>
                     </div>
-                    <p className="text-sm text-gray-600">{quiz.subject}</p>
-                  </div>
-                  <div className="flex items-center justify-between text-sm text-gray-500">
-                    <span>{questionCount} questions</span>
-                    <span>{quiz.attempts.length} {quiz.attempts.length === 1 ? 'attempt' : 'attempts'}</span>
-                  </div>
-                  <div className="mt-4 flex items-center gap-2 text-sm text-purple-600 font-medium">
-                    <span>{lastAttempt ? 'Retake Quiz' : 'Take Quiz'}</span>
-                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    <div className="flex items-center justify-between text-sm text-gray-500">
+                      <span>{questionCount} questions</span>
+                      <span>{quiz.attempts.length} {quiz.attempts.length === 1 ? 'attempt' : 'attempts'}</span>
+                    </div>
+                    <div className="mt-4 flex items-center gap-2 text-sm text-purple-600 font-medium">
+                      <span>{lastAttempt ? 'Retake Quiz' : 'Take Quiz'}</span>
+                      <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </div>
+                  </Link>
+                  <button
+                    onClick={(e) => deleteQuiz(quiz.id, e)}
+                    className="absolute right-2 top-2 rounded p-1.5 text-gray-400 opacity-0 transition-opacity hover:bg-red-50 hover:text-red-600 group-hover:opacity-100"
+                    title="Delete quiz"
+                  >
+                    <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                     </svg>
-                  </div>
-                </Link>
+                  </button>
+                </div>
               )
             })}
           </div>
