@@ -57,28 +57,35 @@ export default function ChatPage({ params }: { params: Promise<{ id: string }> }
     conversationId: id,
     userId: userId || '',
     onMessage: async (msg) => {
+      console.log('🎯 onMessage called:', msg.role, msg.content.substring(0, 50))
+
       // Stop generating indicator when AI finishes
       if (msg.role === 'assistant') {
         setIsGenerating(false)
       }
 
-      // Save message to database
-      await fetch(`/api/conversations/${id}/messages`, {
+      // Add to local state IMMEDIATELY (don't wait for database)
+      console.log('🔥 Adding message to state NOW')
+      setMessages(prev => {
+        const newMessages = [...prev, {
+          id: Date.now().toString(),
+          role: msg.role,
+          content: msg.content,
+          createdAt: new Date().toISOString()
+        }]
+        console.log('✅ State updated, message count:', newMessages.length)
+        return newMessages
+      })
+
+      // Save message to database in background (non-blocking)
+      fetch(`/api/conversations/${id}/messages`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           role: msg.role,
           content: msg.content
         })
-      })
-
-      // Add to local state
-      setMessages(prev => [...prev, {
-        id: Date.now().toString(),
-        role: msg.role,
-        content: msg.content,
-        createdAt: new Date().toISOString()
-      }])
+      }).catch(err => console.error('Failed to save message:', err))
     },
     onFunctionCall: (name, args) => {
       console.log('Function called:', name, args)

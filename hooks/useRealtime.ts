@@ -116,21 +116,9 @@ export function useRealtime(config: RealtimeConfig) {
             break
 
           case 'conversation.item.done':
-            // Item is complete - check if it's a user or assistant message with transcript
+            // Item is complete - check if it's an assistant message with transcript
             if (data.item?.type === 'message') {
-              if (data.item.role === 'user') {
-                const content = data.item.content?.find((c: any) => c.type === 'input_audio')
-                if (content?.transcript) {
-                  // OpenAI provided a transcript - use it and clear browser transcript
-                  userTranscriptRef.current = ''
-                  config.onMessage?.({
-                    role: 'user',
-                    content: content.transcript,
-                    timestamp: new Date()
-                  })
-                }
-                // If no transcript from OpenAI, browser transcript will be used in stopRecording
-              } else if (data.item.role === 'assistant') {
+              if (data.item.role === 'assistant') {
                 // Assistant message - get transcript from output_audio content
                 const content = data.item.content?.find((c: any) => c.type === 'output_audio')
                 if (content?.transcript) {
@@ -411,16 +399,19 @@ export function useRealtime(config: RealtimeConfig) {
       }
     }
 
-    // Show user message immediately with transcript if available, otherwise placeholder
-    const userMessage = userTranscriptRef.current || '[Speaking...]'
+    // Show user message IMMEDIATELY with browser transcript or placeholder
+    const userMessage = userTranscriptRef.current || '[Audio message]'
+    console.log('💬 Showing user message instantly:', userMessage)
     config.onMessage?.({
       role: 'user',
       content: userMessage,
       timestamp: new Date()
     })
+
+    // Clear the transcript for next recording
     userTranscriptRef.current = ''
 
-    // Send the recorded audio to AI
+    // Send the recorded audio to AI immediately
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       console.log('📤 Sending recorded audio to AI')
       wsRef.current.send(JSON.stringify({
